@@ -1,0 +1,22 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111827"></stop>
+      <stop offset="100%" stop-color="#0c2238"></stop>
+    </linearGradient>
+    <linearGradient id="nube" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"></stop>
+      <stop offset="100%" stop-color="#bae6fd"></stop>
+    </linearGradient>
+    <filter id="brillo" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="13"></feGaussianBlur>
+    </filter>
+  </defs>
+  <rect width="500" height="500" rx="55" fill="url(#fondo)"></rect>
+  <circle cx="250" cy="250" r="185" fill="none" stroke="#38bdf8" stroke-width="5" opacity=".75"></circle>
+  <circle cx="250" cy="250" r="135" fill="#38bdf8" opacity=".12" filter="url(#brillo)"></circle>
+  <path d="M145 310 Q105 300 110 255 Q115 210 165 205 Q180 130 255 130 Q325 130 345 205 Q400 210 395 265 Q390 315 340 315 Z" fill="#38bdf8" opacity=".35" filter="url(#brillo)"></path>
+  <path d="M145 310 Q105 300 110 255 Q115 210 165 205 Q180 130 255 130 Q325 130 345 205 Q400 210 395 265 Q390 315 340 315 Z" fill="url(#nube)" stroke="#e0f2fe" stroke-width="5"></path>
+  <path d="M155 265 Q250 300 350 265" fill="none" stroke="#ffffff" stroke-width="7" opacity=".35"></path>
+</svg>

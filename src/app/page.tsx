@@ -107,9 +107,9 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#12090d] text-white">
 
-      <header className="flex flex-wrap items-center
-        justify-between gap-4 border-b border-white/10
-        px-6 py-5">
+  <header className="flex flex-wrap items-center
+    justify-between gap-4 border-b border-white/10
+    px-6 py-5">
 
         <h1 className="text-3xl font-bold tracking-widest
           text-pink-300">
@@ -117,9 +117,9 @@ export default function Home() {
         </h1>
 
         <nav className="flex flex-wrap gap-5">
-          <a href="#">{t.home}</a>
+          <a href="/inicio">{t.home}</a>
           <a href="#">{t.explore}</a>
-          <a href="#">{t.live}</a>
+         <a href="#">{t.live}</a>
           <a href="#">{t.models}</a>
         </nav>
 
@@ -140,15 +140,19 @@ export default function Home() {
             <option value="fr">🇫🇷 Français</option>
           </select>
 
-          <button className="rounded-lg border
-            border-pink-400 px-4 py-2">
-            {t.login}
-          </button>
+          <a
+  href="/login"
+  className="rounded-lg border border-pink-400 px-4 py-2"
+>
+  Iniciar sesión
+</a>
 
-          <button className="rounded-lg bg-pink-700
-            px-4 py-2">
-            {t.register}
-          </button>
+<a
+  href="/registro"
+  className="rounded-lg bg-pink-700 px-4 py-2"
+>
+  Registrate
+</a>
 
         </div>
       </header>
