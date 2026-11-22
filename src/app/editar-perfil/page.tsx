@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -11,9 +11,21 @@ export default function EditarPerfil() {
   const [nombre, setNombre] = useState("");
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
+
+  const [valoresIniciales, setValoresIniciales] = useState({
+    nombre: "",
+    username: "",
+    bio: "",
+  });
+
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState("");
+
+  const hayCambios =
+    nombre !== valoresIniciales.nombre ||
+    username !== valoresIniciales.username ||
+    bio !== valoresIniciales.bio;
 
   useEffect(() => {
     async function cargarPerfil() {
@@ -38,28 +50,34 @@ export default function EditarPerfil() {
         return;
       }
 
-      
+      const datos = {
+        nombre: perfil.full_name || "",
+        username: perfil.username || "",
+        bio: perfil.bio || "",
+      };
 
-      setNombre(perfil.full_name || "");
-      setUsername(perfil.username || "");
-      setBio(perfil.bio || "");
+      setNombre(datos.nombre);
+      setUsername(datos.username);
+      setBio(datos.bio);
+      setValoresIniciales(datos);
       setLoading(false);
     }
 
     cargarPerfil();
   }, []);
 
-  async function guardarPerfil(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function guardarPerfil(): Promise<boolean> {
     setGuardando(true);
     setMensaje("");
 
     const usuario = username.trim().toLowerCase();
 
     if (!/^[a-z0-9_]{3,20}$/.test(usuario)) {
-      setMensaje("El usuario debe tener entre 3 y 20 caracteres, usando letras, números o guion bajo.");
+      setMensaje(
+        "El usuario debe tener entre 3 y 20 caracteres, usando letras, números o guion bajo."
+      );
       setGuardando(false);
-      return;
+      return false;
     }
 
     const {
@@ -68,15 +86,22 @@ export default function EditarPerfil() {
 
     if (!user) {
       router.push("/login");
-      return;
+      setGuardando(false);
+      return false;
     }
+
+    const datosActualizados = {
+      nombre: nombre.trim(),
+      username: usuario,
+      bio: bio.trim(),
+    };
 
     const { error } = await supabase
       .from("profiles")
       .update({
-        full_name: nombre.trim(),
-        username: usuario,
-        bio: bio.trim(),
+        full_name: datosActualizados.nombre,
+        username: datosActualizados.username,
+        bio: datosActualizados.bio,
       })
       .eq("id", user.id);
 
@@ -87,11 +112,53 @@ export default function EditarPerfil() {
           : "No pudimos guardar los cambios: " + error.message
       );
       setGuardando(false);
-      return;
+      return false;
     }
+
+    setNombre(datosActualizados.nombre);
+    setUsername(datosActualizados.username);
+    setBio(datosActualizados.bio);
+    setValoresIniciales(datosActualizados);
 
     setMensaje("¡Perfil actualizado correctamente!");
     setGuardando(false);
+
+    return true;
+  }
+
+  async function manejarEnvio(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    await guardarPerfil();
+  }
+
+  async function volverAlPerfil() {
+    if (guardando) return;
+
+    if (hayCambios) {
+      const deseaGuardar = window.confirm(
+        "Los cambios no han sido guardados, ¿desea guardar los cambios?"
+      );
+
+      if (deseaGuardar) {
+        const guardado = await guardarPerfil();
+
+        if (!guardado) return;
+
+        router.push(
+          `/perfil/${encodeURIComponent(username.trim().toLowerCase())}`
+        );
+        return;
+      }
+
+      router.push(
+        `/perfil/${encodeURIComponent(valoresIniciales.username)}`
+      );
+      return;
+    }
+
+    router.push(
+      `/perfil/${encodeURIComponent(valoresIniciales.username)}`
+    );
   }
 
   if (loading) {
@@ -113,7 +180,7 @@ export default function EditarPerfil() {
           Editar mi perfil
         </h2>
 
-        <form onSubmit={guardarPerfil} className="space-y-6">
+        <form onSubmit={manejarEnvio} className="space-y-6">
           <div>
             <label className="mb-2 block text-sm">Nombre visible</label>
             <input
@@ -171,10 +238,12 @@ export default function EditarPerfil() {
         )}
 
         <button
-          onClick={() => router.push("/")}
-          className="mt-6 w-full text-sm text-gray-400 hover:text-pink-300"
+          type="button"
+          disabled={guardando}
+          onClick={volverAlPerfil}
+          className="mt-6 w-full text-sm text-gray-400 hover:text-pink-300 disabled:opacity-50"
         >
-          Volver al inicio
+          Volver al perfil
         </button>
       </div>
     </main>

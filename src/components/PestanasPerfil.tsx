@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type ReactNode } from "react";
@@ -15,13 +16,13 @@ export default function PestanasPerfil({
 
   return (
     <section>
-      <div className="flex items-center gap-7 border-b border-white/10">
+      <div className="flex items-center justify-center gap-7 border-b border-slate-200">
         <button
           onClick={() => setPestana("publicaciones")}
           className={`border-b-2 pb-3 text-sm font-semibold transition ${
             pestana === "publicaciones"
-              ? "border-sky-200 text-white"
-              : "border-transparent text-gray-400 hover:text-white"
+              ? "border-sky-400 text-black"
+              : "border-transparent text-black hover:text-sky-600"
           }`}
         >
           Publicaciones
@@ -31,8 +32,8 @@ export default function PestanasPerfil({
           onClick={() => setPestana("planes")}
           className={`border-b-2 pb-3 text-sm font-semibold transition ${
             pestana === "planes"
-              ? "border-sky-200 text-white"
-              : "border-transparent text-gray-400 hover:text-white"
+              ? "border-sky-400 text-black"
+              : "border-transparent text-black hover:text-sky-600"
           }`}
         >
           Planes

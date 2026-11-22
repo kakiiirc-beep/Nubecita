@@ -42,30 +42,51 @@ export default function EliminarPublicacion({
         return;
       }
 
-      const archivos = previewPath
-        ? [filePath, previewPath]
-        : [filePath];
-
-      const { error: archivoError } = await supabase.storage
-        .from("Nubecita bucket")
-        .remove(archivos);
-
-      if (archivoError) {
-        setMensaje("No se pudieron eliminar los archivos: " + archivoError.message);
-        return;
-      }
-
-      const { error: registroError } = await supabase
-        .from("publicaciones")
-        .delete()
-        .eq("id", publicationId)
-        .eq("user_id", user.id);
+      // Eliminar primero el registro de la publicación.
+      const { data: publicacionEliminada, error: registroError } =
+        await supabase
+          .from("publicaciones")
+          .delete()
+          .eq("id", publicationId)
+          .eq("user_id", user.id)
+          .select("id");
 
       if (registroError) {
-        setMensaje("No se pudo eliminar el registro: " + registroError.message);
+        setMensaje(
+          "No se pudo eliminar la publicación: " + registroError.message
+        );
         return;
       }
 
+      if (!publicacionEliminada || publicacionEliminada.length === 0) {
+        setMensaje("No se encontró la publicación o no tenés permiso para eliminarla.");
+        return;
+      }
+
+      // Preparar los archivos que pertenecen a la publicación.
+      const archivos = [...new Set(
+        [filePath, previewPath].filter(
+          (ruta): ruta is string => Boolean(ruta)
+        )
+      )];
+
+      // Eliminar los archivos del bucket.
+      if (archivos.length > 0) {
+        const { error: archivoError } = await supabase.storage
+          .from("Nubecita bucket")
+          .remove(archivos);
+
+        if (archivoError) {
+          setMensaje(
+            "La publicación se eliminó, pero no se pudieron borrar todos sus archivos del almacenamiento: " +
+              archivoError.message
+          );
+          router.refresh();
+          return;
+        }
+      }
+
+      setMensaje("¡Publicación eliminada correctamente!");
       router.refresh();
     } catch {
       setMensaje("Ocurrió un error al eliminar la publicación.");

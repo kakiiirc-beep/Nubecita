@@ -1,6 +1,8 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
+import ModelosDestacadas from "@/components/ModelosDestacadas";
 
 const translations = {
   es: {
@@ -11,11 +13,11 @@ const translations = {
     login: "Ingresar",
     register: "Registrarse",
     subtitle: "ENTRETENIMIENTO EXCLUSIVO",
-    title: "Descubrí un mundo",
-    title2: "sin límites",
-    description: "Descubrí transmisiones, creadores y contenido exclusivo en una experiencia internacional.",
+    title: "Tu contenido, tus reglas,",
+    title2: "tus ingresos",
+    description: "Compartí contenido exclusivo, conectá con tus seguidores y monetizá tu creatividad en NUBECITA. Una plataforma creada para creadores de contenido.",
     button: "EXPLORAR PLATAFORMA",
-    sections: "Descubrí NUBECITA",
+    sections: "Descubrí todo lo que NUBECITA tiene para ofrecerte",
     liveSection: "Transmisiones en vivo",
     modelsSection: "Modelos destacadas",
     exclusiveSection: "Contenido exclusivo",
@@ -55,7 +57,7 @@ const translations = {
     liveSection: "Transmissões ao vivo",
     modelsSection: "Modelos em destaque",
     exclusiveSection: "Conteúdo exclusivo",
-    footer: "Todos os direitos reservados."
+    footer: "All rights reserved."
   },
   fr: {
     home: "Accueil",
@@ -88,8 +90,7 @@ export default function Home() {
     if (saved && saved in translations) {
       setLanguage(saved as Language);
     } else {
-      const browserLanguage = navigator.language
-        .slice(0, 2);
+      const browserLanguage = navigator.language.slice(0, 2);
 
       if (browserLanguage in translations) {
         setLanguage(browserLanguage as Language);
@@ -105,117 +106,146 @@ export default function Home() {
   const t = translations[language];
 
   return (
-    <main className="min-h-screen bg-[#12090d] text-white">
+    <main className="relative isolate min-h-screen bg-white text-slate-900">
 
-  <header className="flex flex-wrap items-center
-    justify-between gap-4 border-b border-white/10
-    px-6 py-5">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          background: `
+            radial-gradient(ellipse at 10% 15%, rgba(125, 211, 252, 0.35), transparent 35%),
+            radial-gradient(ellipse at 85% 25%, rgba(186, 230, 253, 0.45), transparent 35%),
+            radial-gradient(ellipse at 50% 85%, rgba(125, 211, 252, 0.25), transparent 40%)
+          `,
+        }}
+      />
 
-        <h1 className="text-3xl font-bold tracking-widest
-          text-pink-300">
-          NUBECITA
-        </h1>
+      <div className="relative z-10">
 
-        <nav className="flex flex-wrap gap-5">
-          <a href="/inicio">{t.home}</a>
-          <a href="#">{t.explore}</a>
-         <a href="#">{t.live}</a>
-          <a href="#">{t.models}</a>
-        </nav>
+        <header className="relative flex flex-col items-center gap-5 border-b border-slate-200 px-6 py-7">
 
-        <div className="flex flex-wrap items-center gap-3">
-
-          <select
-            value={language}
-            onChange={(e) =>
-              changeLanguage(e.target.value as Language)
-            }
-            className="rounded-lg border border-pink-400
-              bg-[#24121b] px-3 py-2 text-white"
-            aria-label="Choose language"
-          >
-            <option value="es">🇪🇸 Español</option>
-            <option value="en">🇺🇸 English</option>
-            <option value="pt">🇧🇷 Português</option>
-            <option value="fr">🇫🇷 Français</option>
-          </select>
+          <div className="absolute right-6 top-6">
+            <select
+              value={language}
+              onChange={(e) => changeLanguage(e.target.value as Language)}
+              className="rounded-lg border border-sky-300 bg-white px-3 py-2 text-sm text-slate-900"
+              aria-label="Choose language"
+            >
+              <option value="es">🇪🇸 Español</option>
+              <option value="en">🇺🇸 English</option>
+              <option value="pt">🇧🇷 Português</option>
+              <option value="fr">🇫🇷 Français</option>
+            </select>
+          </div>
 
           <a
-  href="/login"
-  className="rounded-lg border border-pink-400 px-4 py-2"
+            href="/registro"
+            className="text-4xl font-bold tracking-widest text-sky-600 transition hover:text-sky-500"
+          >
+            NUBECITA
+          </a>
+
+          <div className="flex flex-wrap justify-center gap-3">
+
+            <a
+              href="#modelos"
+              className="rounded-xl border border-sky-400 bg-white px-6 py-3 font-semibold text-sky-700 shadow-sm transition hover:bg-sky-50"
+            >
+              Modelos destacadas
+            </a>
+
+            <a
+              href="/registro"
+              className="rounded-xl bg-sky-500 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-sky-400"
+            >
+              Monetizá tu contenido
+            </a>
+
+          </div>
+
+        </header>
+
+        <section className="mx-auto max-w-6xl px-6 pt-44 pb-28 text-center">
+
+          <p className="mb-5 text-sm tracking-widest text-sky-600">
+            {t.subtitle}
+          </p>
+
+          <h2 className="mb-6 text-5xl font-bold md:text-7xl">
+            {t.title}
+            <br />
+            <span className="text-sky-500">
+              {t.title2}
+            </span>
+          </h2>
+
+          <p className="mx-auto mb-10 max-w-xl text-slate-600">
+            {t.description}
+          </p>
+
+          <a
+  href="/explorar"
+  className="inline-block rounded-xl bg-sky-500 px-8 py-4 font-semibold text-white transition hover:bg-sky-400"
 >
-  Iniciar sesión
+  {t.button}
 </a>
 
-<a
-  href="/registro"
-  className="rounded-lg bg-pink-700 px-4 py-2"
->
-  Registrate
-</a>
+        </section>
 
-        </div>
-      </header>
+        <section className="mx-auto max-w-6xl px-6 pb-24">
 
-      <section className="mx-auto max-w-6xl px-6
-        py-28 text-center">
+          <h3 className="mb-12 text-center text-3xl font-bold text-slate-900">
+            Descubrí todo lo que NUBECITA tiene para ofrecerte
+          </h3>
 
-        <p className="mb-5 text-sm tracking-widest
-          text-pink-300">
-          {t.subtitle}
-        </p>
+          <div className="grid gap-8 md:grid-cols-3">
 
-        <h2 className="mb-6 text-5xl font-bold
-          md:text-7xl">
-          {t.title}
-          <br />
-          <span className="text-pink-400">
-            {t.title2}
-          </span>
-        </h2>
+            <div className="rounded-2xl border border-sky-200 bg-white/80 p-8 text-center shadow-sm backdrop-blur-sm transition hover:-translate-y-1 hover:shadow-lg">
+              <div className="mb-5 text-5xl"></div>
 
-        <p className="mx-auto mb-10 max-w-xl text-gray-400">
-          {t.description}
-        </p>
-
-        <button className="rounded-xl bg-pink-700
-          px-8 py-4 font-semibold">
-          {t.button}
-        </button>
-
-      </section>
-
-      <section className="mx-auto max-w-6xl px-6 pb-24">
-
-        <h3 className="mb-8 text-3xl font-bold">
-          {t.sections}
-        </h3>
-
-        <div className="grid gap-6 md:grid-cols-3">
-
-          {[t.liveSection, t.modelsSection,
-            t.exclusiveSection].map((item) => (
-
-            <div key={item}
-              className="rounded-2xl border
-              border-pink-900 bg-[#24121b] p-8">
-
-              <h4 className="text-xl font-semibold
-                text-pink-300">
-                {item}
+              <h4 className="mb-3 text-xl font-bold text-sky-700">
+                Contenido exclusivo
               </h4>
 
+              <p className="leading-relaxed text-slate-600">
+                Compartí fotos y videos exclusivos con las personas que siguen tu contenido.
+              </p>
             </div>
-          ))}
 
-        </div>
-      </section>
+            <div className="rounded-2xl border border-sky-200 bg-white/80 p-8 text-center shadow-sm backdrop-blur-sm transition hover:-translate-y-1 hover:shadow-lg">
+              <div className="mb-5 text-5xl"></div>
 
-      <footer className="border-t border-white/10
-        px-6 py-8 text-center text-gray-500">
-        NUBECITA © 2026 - {t.footer}
-      </footer>
+              <h4 className="mb-3 text-xl font-bold text-sky-700">
+                Monetizá tu contenido
+              </h4>
 
+              <p className="leading-relaxed text-slate-600">
+                Generá ingresos compartiendo contenido y ofreciendo planes exclusivos a tus seguidores.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-sky-200 bg-white/80 p-8 text-center shadow-sm backdrop-blur-sm transition hover:-translate-y-1 hover:shadow-lg">
+              <div className="mb-5 text-5xl">💙</div>
+
+              <h4 className="mb-3 text-xl font-bold text-sky-700">
+                Tu comunidad
+              </h4>
+
+              <p className="leading-relaxed text-slate-600">
+                Creá tu propia comunidad, conectá con tus seguidores y hacé crecer tu perfil.
+              </p>
+            </div>
+
+          </div>
+        </section>
+
+        <ModelosDestacadas />
+
+        <footer className="border-t border-slate-200 px-6 py-8 text-center text-slate-500">
+          NUBECITA © 2026 - {t.footer}
+        </footer>
+
+      </div>
     </main>
   );
 }

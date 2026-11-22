@@ -1,3 +1,4 @@
+
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AccionesSolicitud from "@/components/AccionesSolicitud";
@@ -45,13 +46,36 @@ export default async function AdminPage() {
     .select("id, denunciante_id, usuario_denunciado_id, publicacion_id, motivo, estado, created_at")
     .order("created_at", { ascending: false });
 
-  // Cuentas de usuarios
+  // Datos públicos de las cuentas
   const { data: cuentas, error: cuentasError } = await supabase
     .from("profiles")
-    .select("id, username, full_name, avatar_url, estado_cuenta, motivo_suspension")
+    .select("id, username, full_name, avatar_url")
     .order("username", { ascending: true });
 
-  // Buscar perfiles relacionados con las solicitudes y denuncias
+  // Datos privados de moderación
+  const { data: moderaciones, error: moderacionesError } = await supabase
+    .from("moderacion_cuentas")
+    .select("user_id, estado_cuenta, motivo_suspension");
+
+  // Relacionar los datos públicos con los datos privados
+  const moderacionPorId = new Map(
+    (moderaciones || []).map((moderacion) => [
+      moderacion.user_id,
+      moderacion,
+    ])
+  );
+
+  const cuentasConModeracion = (cuentas || []).map((cuenta) => {
+    const moderacion = moderacionPorId.get(cuenta.id);
+
+    return {
+      ...cuenta,
+      estado_cuenta: moderacion?.estado_cuenta || "activo",
+      motivo_suspension: moderacion?.motivo_suspension || null,
+    };
+  });
+
+  // Buscar perfiles relacionados con solicitudes y denuncias
   const idsUsuarios = [
     ...new Set([
       ...(solicitudes || []).map((s) => s.user_id),
@@ -250,15 +274,17 @@ export default async function AdminPage() {
         <section className="mt-12">
           <h2 className="mb-5 text-2xl font-bold">Gestión de cuentas</h2>
 
-          {cuentasError ? (
-            <p className="text-red-300">Error: {cuentasError.message}</p>
-          ) : !cuentas || cuentas.length === 0 ? (
+          {cuentasError || moderacionesError ? (
+            <p className="text-red-300">
+              Error: {(cuentasError || moderacionesError)?.message}
+            </p>
+          ) : !cuentasConModeracion || cuentasConModeracion.length === 0 ? (
             <p className="rounded-2xl border border-white/10 bg-[#151019] p-8 text-gray-400">
               No hay cuentas disponibles.
             </p>
           ) : (
             <div className="space-y-4">
-              {cuentas.map((cuenta) => (
+              {cuentasConModeracion.map((cuenta) => (
                 <article key={cuenta.id} className="rounded-2xl border border-white/10 bg-[#151019] p-5">
                   <p className="font-semibold">
                     {cuenta.full_name || cuenta.username || "Usuario"}
@@ -272,7 +298,7 @@ export default async function AdminPage() {
                       ? "bg-red-500/10 text-red-300"
                       : "bg-green-500/10 text-green-300"
                   }`}>
-                    {cuenta.estado_cuenta || "activo"}
+                    {cuenta.estado_cuenta}
                   </span>
 
                   {cuenta.motivo_suspension && (
@@ -283,7 +309,7 @@ export default async function AdminPage() {
 
                   <AccionesCuenta
                     usuarioId={cuenta.id}
-                    estado={cuenta.estado_cuenta || "activo"}
+                    estado={cuenta.estado_cuenta}
                   />
                 </article>
               ))}

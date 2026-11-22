@@ -258,16 +258,29 @@ export default function SubirContenido() {
         }
       }
 
-      setMensaje(
-        `¡Se publicaron correctamente ${publicacionesGuardadas} archivos!`
-      );
-
-      archivos.forEach((archivo) =>
-        URL.revokeObjectURL(archivo.previewUrl)
-      );
+            // Limpiar las vistas previas de los archivos.
+      archivos.forEach((archivo) => {
+        URL.revokeObjectURL(archivo.previewUrl);
+      });
 
       setArchivos([]);
       setArchivoActivo(0);
+
+      // Buscar el username para redirigir al perfil público.
+      const { data: perfil, error: perfilError } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single();
+
+      if (perfilError || !perfil?.username) {
+        setMensaje(
+          "Las publicaciones se guardaron, pero no se pudo abrir tu perfil."
+        );
+        return;
+      }
+
+      router.push(`/perfil/${perfil.username}`);
     } catch (error) {
       setMensaje(
         `${publicacionesGuardadas} publicaciones guardadas. ${

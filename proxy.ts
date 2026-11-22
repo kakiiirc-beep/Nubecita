@@ -1,3 +1,4 @@
+
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -36,13 +37,11 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (user) {
-    const { data: perfil } = await supabase
-      .from("profiles")
-      .select("estado_cuenta")
-      .eq("id", user.id)
-      .maybeSingle();
+    const { data: suspendida, error } = await supabase.rpc(
+      "mi_cuenta_esta_suspendida"
+    );
 
-    if (perfil?.estado_cuenta === "suspendido") {
+    if (!error && suspendida === true) {
       const respuesta = NextResponse.redirect(
         new URL("/cuenta-suspendida", request.url)
       );
