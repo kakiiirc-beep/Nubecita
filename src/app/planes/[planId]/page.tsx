@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { loadMercadoPago } from "@mercadopago/sdk-js";
 import { createClient } from "@/lib/supabase/client";
 
 type Plan = {
@@ -22,6 +23,33 @@ type Archivo = {
   previewUrl: string;
 };
 
+type WalletBrickController = {
+  unmount: () => Promise<void> | void;
+};
+
+type MercadoPagoInstance = {
+  bricks: () => {
+    create: (
+      type: "wallet",
+      containerId: string,
+      settings: {
+        initialization: {
+          preferenceId: string;
+        };
+      }
+    ) => Promise<WalletBrickController>;
+  };
+};
+
+declare global {
+  interface Window {
+    MercadoPago: new (
+      publicKey: string,
+      options: { locale: string }
+    ) => MercadoPagoInstance;
+  }
+}
+
 export default function VerPlanPage() {
   const params = useParams<{ planId: string }>();
   const planId = params.planId;
@@ -33,6 +61,7 @@ export default function VerPlanPage() {
   const [requiereCompra, setRequiereCompra] = useState(false);
   const [comprando, setComprando] = useState(false);
   const [errorCompra, setErrorCompra] = useState("");
+  const [preferenceId, setPreferenceId] = useState<string | null>(null);
 
   useEffect(() => {
     let activo = true;
@@ -109,6 +138,7 @@ export default function VerPlanPage() {
     try {
       setComprando(true);
       setErrorCompra("");
+      setPreferenceId(null);
 
       const respuesta = await fetch(
         `/api/planes/${planId}/comprar`,
@@ -126,15 +156,15 @@ export default function VerPlanPage() {
       }
 
       if (
-        typeof datos.url !== "string" ||
-        !datos.url.startsWith("https://")
+        typeof datos.preferenceId !== "string" ||
+        !datos.preferenceId
       ) {
         throw new Error(
-          "Mercado Pago no devolvió un enlace de pago válido."
+          "Mercado Pago no devolvió un identificador de pago válido."
         );
       }
 
-      window.location.assign(datos.url);
+      setPreferenceId(datos.preferenceId);
     } catch (err) {
       setErrorCompra(
         err instanceof Error
@@ -145,6 +175,80 @@ export default function VerPlanPage() {
       setComprando(false);
     }
   }
+
+  useEffect(() => {
+    if (!preferenceId) return;
+
+    let cancelado = false;
+    let brickController: WalletBrickController | null = null;
+
+    async function mostrarWalletBrick() {
+      try {
+        const publicKey =
+          process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY;
+
+        if (!publicKey) {
+          throw new Error(
+            "Falta configurar la Public Key de Mercado Pago."
+          );
+        }
+
+        await loadMercadoPago();
+
+        if (cancelado) return;
+
+        if (!window.MercadoPago) {
+          throw new Error(
+            "No se pudo cargar el SDK de Mercado Pago."
+          );
+        }
+
+        const mercadoPago = new window.MercadoPago(publicKey, {
+          locale: "es-AR",
+        });
+
+        const bricksBuilder = mercadoPago.bricks();
+
+        const controller = await bricksBuilder.create(
+          "wallet",
+          "walletBrick_container",
+          {
+            initialization: {
+              preferenceId: preferenceId as string,
+            },
+          }
+        );
+
+        if (cancelado) {
+          await controller.unmount();
+          return;
+        }
+
+        brickController = controller;
+        setComprando(false);
+      } catch (err) {
+        if (cancelado) return;
+
+        setErrorCompra(
+          err instanceof Error
+            ? err.message
+            : "No se pudo mostrar el botón de Mercado Pago."
+        );
+
+        setComprando(false);
+      }
+    }
+
+    mostrarWalletBrick();
+
+    return () => {
+      cancelado = true;
+
+      if (brickController) {
+        void brickController.unmount();
+      }
+    };
+  }, [preferenceId]);
 
   if (cargando) {
     return (
@@ -212,16 +316,30 @@ export default function VerPlanPage() {
                   primero necesitás completar la compra.
                 </p>
 
-                <button
-                  type="button"
-                  onClick={iniciarCompra}
-                  disabled={comprando}
-                  className="mt-5 w-full rounded-xl bg-sky-500 px-5 py-3 font-bold text-white transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                >
-                  {comprando
-                    ? "Preparando pago..."
-                    : "Comprar pack"}
-                </button>
+                {!preferenceId && (
+                  <button
+                    type="button"
+                    onClick={iniciarCompra}
+                    disabled={comprando}
+                    className="mt-5 w-full rounded-xl bg-sky-500 px-5 py-3 font-bold text-white transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  >
+                    {comprando
+                      ? "Preparando pago..."
+                      : "Comprar pack"}
+                  </button>
+                )}
+
+                {preferenceId && (
+                  <div className="mt-5">
+                    <div id="walletBrick_container" />
+
+                    {comprando && (
+                      <p className="text-sm text-slate-600">
+                        Cargando opciones de pago...
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {errorCompra && (
                   <p className="mt-4 text-sm font-medium text-red-600">
@@ -240,14 +358,14 @@ export default function VerPlanPage() {
             </h2>
 
             {requiereCompra ? (
-  <p className="text-sm text-slate-500">
-    Comprá este pack para desbloquear sus fotos y videos.
-  </p>
-) : archivos.length === 0 ? (
-  <p className="text-sm text-slate-500">
-    Este plan todavía no tiene archivos disponibles.
-  </p>
-) : (
+              <p className="text-sm text-slate-500">
+                Comprá este pack para desbloquear sus fotos y videos.
+              </p>
+            ) : archivos.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Este plan todavía no tiene archivos disponibles.
+              </p>
+            ) : (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {archivos.map((archivo) => (
                   <article

@@ -298,7 +298,7 @@ export async function POST(_request: Request, context: Context) {
           tieneBackUrlsActuales(preferencia, origin, planId)
         ) {
           return NextResponse.json({
-            url: preferencia.sandbox_init_point,
+            preferenceId: preferencia.id,
           });
         }
 
@@ -356,7 +356,7 @@ export async function POST(_request: Request, context: Context) {
         }
 
         return NextResponse.json({
-          url: preferencia.sandbox_init_point,
+          preferenceId: preferencia.id,
         });
       }
 
@@ -439,7 +439,7 @@ export async function POST(_request: Request, context: Context) {
     }
 
     return NextResponse.json({
-      url: preferencia.sandbox_init_point,
+      preferenceId: preferencia.id,
     });
   } catch (error) {
     console.error(
