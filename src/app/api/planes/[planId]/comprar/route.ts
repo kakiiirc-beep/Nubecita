@@ -19,6 +19,26 @@ function errorResponse(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
+type PreferenciaConBackUrls = {
+  back_urls?: {
+    success?: string;
+    pending?: string;
+    failure?: string;
+  };
+};
+
+function tieneBackUrlsActuales(
+  preferencia: PreferenciaConBackUrls,
+  origin: string,
+  planId: string
+): boolean {
+  return (
+    preferencia.back_urls?.success === `${origin}/mis-compras` &&
+    preferencia.back_urls?.pending === `${origin}/mis-compras` &&
+    preferencia.back_urls?.failure === `${origin}/planes/${planId}`
+  );
+}
+
 export async function POST(_request: Request, context: Context) {
   try {
     const { planId } = await context.params;
@@ -264,7 +284,8 @@ export async function POST(_request: Request, context: Context) {
       return errorResponse("La URL de NUBECITA no es válida.", 500);
     }
 
-    // 13. Recuperar una preferencia ya guardada, si existe.
+    // 13. Recuperar una preferencia guardada solamente si sus
+    // direcciones de retorno corresponden al dominio actual.
     if (compraExistente?.mercadopago_preference_id) {
       try {
         const preferencia = await preferenceClient.get({
@@ -273,12 +294,17 @@ export async function POST(_request: Request, context: Context) {
 
         if (
           preferencia.external_reference === compraId &&
-          preferencia.sandbox_init_point
+          preferencia.sandbox_init_point &&
+          tieneBackUrlsActuales(preferencia, origin, planId)
         ) {
           return NextResponse.json({
             url: preferencia.sandbox_init_point,
           });
         }
+
+        console.warn(
+          "CHECKOUT: preferencia guardada descartada por tener datos o URLs anteriores."
+        );
       } catch (error) {
         console.error(
           "No se pudo recuperar la preferencia existente:",
@@ -287,7 +313,7 @@ export async function POST(_request: Request, context: Context) {
       }
     }
 
-    // 14. Buscar en Mercado Pago una preferencia que se haya creado
+    // 14. Buscar una preferencia anterior que se haya creado
     // pero cuyo ID no haya llegado a guardarse en Supabase.
     const busqueda = await preferenceClient.search({
       options: {
@@ -308,7 +334,8 @@ export async function POST(_request: Request, context: Context) {
 
       if (
         preferencia.external_reference === compraId &&
-        preferencia.sandbox_init_point
+        preferencia.sandbox_init_point &&
+        tieneBackUrlsActuales(preferencia, origin, planId)
       ) {
         const { error: updateError } = await admin
           .from("compras_planes")
@@ -332,6 +359,10 @@ export async function POST(_request: Request, context: Context) {
           url: preferencia.sandbox_init_point,
         });
       }
+
+      console.warn(
+        "CHECKOUT: preferencia encontrada descartada por tener URLs anteriores."
+      );
     }
 
     // 15. Calcular la comisión del 15%.
@@ -339,7 +370,7 @@ export async function POST(_request: Request, context: Context) {
     const comisionCentavos = Math.round(importeCentavos * 0.15);
     const comision = comisionCentavos / 100;
 
-    // 16. Crear preferencia exclusivamente para pruebas.
+    // 16. Crear una preferencia exclusivamente para pruebas.
     const preferencia = await preferenceClient.create({
       body: {
         items: [
@@ -364,7 +395,7 @@ export async function POST(_request: Request, context: Context) {
         },
       },
       requestOptions: {
-        idempotencyKey: compraId,
+        idempotencyKey: `checkout-v2-${compraId}`,
       },
     });
 
@@ -377,7 +408,18 @@ export async function POST(_request: Request, context: Context) {
       );
     }
 
-    // 18. Guardar el ID de preferencia.
+    // 18. Comprobar que la preferencia nueva tenga las URLs correctas.
+    if (!tieneBackUrlsActuales(preferencia, origin, planId)) {
+      console.error(
+        "CHECKOUT: Mercado Pago devolvió una preferencia con URLs incorrectas."
+      );
+      return errorResponse(
+        "La preferencia de pago no tiene las direcciones de retorno esperadas.",
+        502
+      );
+    }
+
+    // 19. Guardar el ID de preferencia.
     const { error: updateError } = await admin
       .from("compras_planes")
       .update({
