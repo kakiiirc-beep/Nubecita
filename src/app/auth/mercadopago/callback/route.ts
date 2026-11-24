@@ -148,12 +148,18 @@ console.log("[Mercado Pago] Validación de cookies:", {
     }
 
     const tokens: {
-      access_token?: string;
-      refresh_token?: string;
-      user_id?: number | string;
-      expires_in?: number;
-      scope?: string;
-    } = await tokenResponse.json();
+  access_token?: string;
+  refresh_token?: string;
+  user_id?: number | string;
+  expires_in?: number;
+  scope?: string;
+  public_key?: string;
+} = await tokenResponse.json();
+
+console.log(
+  "[Mercado Pago] OAuth devolvió public_key:",
+  Boolean(tokens.public_key)
+);
 
     if (
       !tokens.access_token ||
