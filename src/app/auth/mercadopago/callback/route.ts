@@ -55,14 +55,16 @@ export async function GET(request: NextRequest) {
     const stateCookie = request.cookies.get("mp_oauth_state")?.value;
     const verifier = request.cookies.get("mp_oauth_verifier")?.value;
     const userCookie = request.cookies.get("mp_oauth_user")?.value;
-console.log("[Mercado Pago] Validación de cookies:", {
-  tieneCode: Boolean(code),
-  tieneState: Boolean(state),
-  tieneStateCookie: Boolean(stateCookie),
-  tieneVerifier: Boolean(verifier),
-  tieneUserCookie: Boolean(userCookie),
-  stateCoincide: Boolean(state && stateCookie && state === stateCookie),
-});
+
+    console.log("[Mercado Pago] Validación de cookies:", {
+      tieneCode: Boolean(code),
+      tieneState: Boolean(state),
+      tieneStateCookie: Boolean(stateCookie),
+      tieneVerifier: Boolean(verifier),
+      tieneUserCookie: Boolean(userCookie),
+      stateCoincide: Boolean(state && stateCookie && state === stateCookie),
+    });
+
     if (
       !code ||
       !state ||
@@ -148,18 +150,19 @@ console.log("[Mercado Pago] Validación de cookies:", {
     }
 
     const tokens: {
-  access_token?: string;
-  refresh_token?: string;
-  user_id?: number | string;
-  expires_in?: number;
-  scope?: string;
-  public_key?: string;
-} = await tokenResponse.json();
+      access_token?: string;
+      refresh_token?: string;
+      user_id?: number | string;
+      expires_in?: number;
+      scope?: string;
+      public_key?: string;
+    } = await tokenResponse.json();
 
-console.log(
-  "[Mercado Pago] OAuth devolvió public_key:",
-  Boolean(tokens.public_key)
-);
+    // Registrar solamente si llegó la public_key, nunca su valor.
+    console.log(
+      "[Mercado Pago] OAuth devolvió public_key:",
+      Boolean(tokens.public_key)
+    );
 
     if (
       !tokens.access_token ||
@@ -176,6 +179,8 @@ console.log(
       );
     }
 
+    const mpUserId = String(tokens.user_id);
+
     // Crear un cliente administrativo exclusivamente del lado servidor.
     const admin = createSupabaseAdmin(
       supabaseUrl,
@@ -189,42 +194,133 @@ console.log(
       }
     );
 
-    // Crear una conexión nueva sin sobrescribir conexiones existentes.
-    const { error: guardarError } = await admin
+    // Buscar si la modelo ya tiene una conexión.
+    const {
+      data: conexionExistente,
+      error: consultaConexionError,
+    } = await admin
       .from("mercadopago_conexiones")
-      .insert({
-        user_id: user.id,
-        mp_user_id: String(tokens.user_id),
-        access_token_encrypted: cifrarToken(tokens.access_token),
-        refresh_token_encrypted: cifrarToken(tokens.refresh_token),
-        token_expires_at: new Date(
-          Date.now() + tokens.expires_in * 1000
-        ).toISOString(),
-        scope: tokens.scope,
-        estado: "connected",
-        entorno: "pruebas",
-        refresh_lock_token: null,
-        refresh_lock_until: null,
-        updated_at: new Date().toISOString(),
-      });
+      .select("user_id, mp_user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
 
-    if (guardarError) {
-      if (guardarError.code === "23505") {
+    if (consultaConexionError) {
+      console.error(
+        "[Mercado Pago] Error al consultar la conexión existente:",
+        consultaConexionError.message
+      );
+
+      return errorResponse(
+        "No se pudo verificar la conexión existente.",
+        500
+      );
+    }
+
+    // Comprobar que la cuenta de Mercado Pago no pertenezca a otra modelo.
+    const {
+      data: cuentaVinculada,
+      error: consultaCuentaError,
+    } = await admin
+      .from("mercadopago_conexiones")
+      .select("user_id")
+      .eq("mp_user_id", mpUserId)
+      .neq("user_id", user.id)
+      .maybeSingle();
+
+    if (consultaCuentaError) {
+      console.error(
+        "[Mercado Pago] Error al verificar la cuenta vinculada:",
+        consultaCuentaError.message
+      );
+
+      return errorResponse(
+        "No se pudo verificar la cuenta de Mercado Pago.",
+        500
+      );
+    }
+
+    if (cuentaVinculada) {
+      return errorResponse(
+        "Esta cuenta de Mercado Pago ya está vinculada a otra modelo.",
+        409
+      );
+    }
+
+    // Preparar los datos de la conexión.
+    const datosConexion = {
+      mp_user_id: mpUserId,
+      access_token_encrypted: cifrarToken(tokens.access_token),
+      refresh_token_encrypted: cifrarToken(tokens.refresh_token),
+      token_expires_at: new Date(
+        Date.now() + tokens.expires_in * 1000
+      ).toISOString(),
+      scope: tokens.scope,
+      estado: "connected",
+      entorno: "pruebas",
+      refresh_lock_token: null,
+      refresh_lock_until: null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (conexionExistente) {
+      // No permitir reemplazar una cuenta de Mercado Pago diferente.
+      if (conexionExistente.mp_user_id !== mpUserId) {
         return errorResponse(
-          "Esta cuenta de Mercado Pago ya está conectada o tu modelo ya tiene una cuenta vinculada.",
+          "La modelo ya tiene otra cuenta de Mercado Pago vinculada. No se modificó la conexión existente.",
           409
         );
       }
 
-      console.error(
-        "[Mercado Pago] Error al guardar la conexión:",
-        guardarError.message
-      );
+      // Actualizar los tokens de la misma cuenta ya vinculada.
+      const {
+        data: conexionActualizada,
+        error: actualizarError,
+      } = await admin
+        .from("mercadopago_conexiones")
+        .update(datosConexion)
+        .eq("user_id", user.id)
+        .eq("mp_user_id", mpUserId)
+        .select("user_id")
+        .maybeSingle();
 
-      return errorResponse(
-        "No se pudo guardar la conexión de Mercado Pago.",
-        500
-      );
+      if (actualizarError || !conexionActualizada) {
+        console.error(
+          "[Mercado Pago] Error al actualizar la conexión:",
+          actualizarError?.message ?? "No se encontró la conexión para actualizar."
+        );
+
+        return errorResponse(
+          "No se pudo actualizar la conexión de Mercado Pago.",
+          500
+        );
+      }
+    } else {
+      // Si no existe una conexión, crear una nueva.
+      const { error: guardarError } = await admin
+        .from("mercadopago_conexiones")
+        .insert({
+          user_id: user.id,
+          ...datosConexion,
+        });
+
+      if (guardarError) {
+        if (guardarError.code === "23505") {
+          return errorResponse(
+            "Esta cuenta de Mercado Pago ya está conectada o tu modelo ya tiene una cuenta vinculada.",
+            409
+          );
+        }
+
+        console.error(
+          "[Mercado Pago] Error al guardar la conexión:",
+          guardarError.message
+        );
+
+        return errorResponse(
+          "No se pudo guardar la conexión de Mercado Pago.",
+          500
+        );
+      }
     }
 
     const destino = perfil.username
