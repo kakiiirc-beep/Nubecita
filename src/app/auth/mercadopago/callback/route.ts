@@ -323,9 +323,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const destino = perfil.username
-      ? `/perfil/${encodeURIComponent(perfil.username)}?mercadopago=conectado`
-      : "/?mercadopago=conectado";
+    const publicKeyRecibida = Boolean(tokens.public_key);
+
+const destino = perfil.username
+  ? `/perfil/${encodeURIComponent(perfil.username)}?mercadopago=conectado&mp_public_key=${publicKeyRecibida}`
+  : `/?mercadopago=conectado&mp_public_key=${publicKeyRecibida}`;
 
     return limpiarCookies(
       NextResponse.redirect(new URL(destino, request.url))
