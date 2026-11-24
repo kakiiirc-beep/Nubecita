@@ -6,17 +6,30 @@ import { useRouter } from "next/navigation";
 
 type Props = {
   ubicacion: "perfil" | "menu";
+  verificado: boolean;
 };
 
-export default function CrearPlanAviso({ ubicacion }: Props) {
+export default function CrearPlanAviso({
+  ubicacion,
+  verificado,
+}: Props) {
   const [abierto, setAbierto] = useState(false);
   const router = useRouter();
+
+  function accederCrearPlan() {
+    if (verificado) {
+      router.push("/crear-plan");
+      return;
+    }
+
+    setAbierto(true);
+  }
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setAbierto(true)}
+        onClick={accederCrearPlan}
         className={
           ubicacion === "perfil"
             ? "flex w-full items-center justify-center rounded-2xl border border-sky-200 bg-white px-4 py-4 text-base font-bold text-sky-600 shadow-sm transition hover:bg-sky-50"

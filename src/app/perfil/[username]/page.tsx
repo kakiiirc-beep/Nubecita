@@ -1,9 +1,12 @@
 
+import Link from "next/link";
+import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
 import BuscadorUsuarios from "@/components/BuscadorUsuarios";
 import EliminarPublicacion from "@/components/EliminarPublicacion";
 import EliminarPlan from "@/components/EliminarPlan";
+import EditarPlan from "@/components/EditarPlan";
 import EditarPublicacion from "@/components/EditarPublicacion";
 import VerImagen from "@/components/VerImagen";
 import PestanasPerfil from "@/components/PestanasPerfil";
@@ -12,6 +15,7 @@ import FotosPerfil from "@/components/FotosPerfil";
 import CrearPlanAviso from "@/components/CrearPlanAviso";
 import EditarPerfilModal from "@/components/EditarPerfilModal";
 import NotificacionFotos from "@/components/NotificacionFotos";
+import DesconectarMercadoPago from "@/components/DesconectarMercadoPago";
 
 export default async function PerfilPublico({
   params,
@@ -52,6 +56,43 @@ export default async function PerfilPublico({
 
   const esPropietario = user?.id === perfil.id;
 
+  let mercadoPagoConectado = false;
+
+  if (esPropietario && perfil.role === "modelo") {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (supabaseUrl && serviceRoleKey) {
+      const admin = createSupabaseAdmin(
+        supabaseUrl,
+        serviceRoleKey,
+        {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+          },
+        }
+      );
+
+      const { data: conexion, error: conexionError } = await admin
+        .from("mercadopago_conexiones")
+        .select("user_id")
+        .eq("user_id", perfil.id)
+        .eq("estado", "connected")
+        .maybeSingle();
+
+      if (conexionError) {
+        console.error(
+          "[Mercado Pago] Error al consultar conexión:",
+          conexionError.message
+        );
+      } else {
+        mercadoPagoConectado = Boolean(conexion);
+      }
+    }
+  }
+
   let estadoSolicitud: string | null = null;
 
   if (esPropietario) {
@@ -66,16 +107,38 @@ export default async function PerfilPublico({
     estadoSolicitud = solicitud?.estado ?? null;
   }
 
+  // Cliente administrativo para generar enlaces firmados del almacenamiento.
+  const supabaseUrlAdmin = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKeyAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  const adminStorage =
+    supabaseUrlAdmin && serviceRoleKeyAdmin
+      ? createSupabaseAdmin(supabaseUrlAdmin, serviceRoleKeyAdmin, {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+            detectSessionInUrl: false,
+          },
+        })
+      : null;
+
   async function obtenerUrlFoto(ruta: string | null) {
     if (!ruta) return null;
 
     if (ruta.startsWith("http")) return ruta;
 
-    const { data, error } = await supabase.storage
+    if (!adminStorage) {
+      console.error(
+        "No está disponible el cliente administrativo de Supabase."
+      );
+      return null;
+    }
+
+    const { data, error } = await adminStorage.storage
       .from("Nubecita bucket")
       .createSignedUrl(ruta, 3600);
 
-    return error ? null : data.signedUrl;
+    return error || !data ? null : data.signedUrl;
   }
 
   const [avatarUrl, coverUrl] = await Promise.all([
@@ -88,26 +151,45 @@ export default async function PerfilPublico({
     { p_perfil_id: perfil.id }
   );
 
-  const { data: publicaciones } = await supabase
+  // La consulta conserva las políticas de acceso del usuario.
+  let publicacionesQuery = supabase
     .from("publicaciones")
     .select(
       "id, file_path, preview_path, description, mime_type, visibility, created_at"
     )
-    .eq("user_id", perfil.id)
-    .order("created_at", { ascending: false });
+    .eq("user_id", perfil.id);
 
+  if (!esPropietario) {
+    publicacionesQuery = publicacionesQuery.eq("visibility", "publico");
+  }
+
+  const { data: publicaciones } = await publicacionesQuery.order(
+    "created_at",
+    { ascending: false }
+  );
+
+  // Los enlaces se generan con el cliente administrativo solamente
+  // para los archivos que la consulta anterior permitió obtener.
   const publicacionesConUrl = await Promise.all(
     (publicaciones || []).map(async (publicacion) => {
+      if (!adminStorage) {
+        return {
+          ...publicacion,
+          url: null,
+          previewUrl: null,
+        };
+      }
+
       const { data: original, error: originalError } =
-        await supabase.storage
+        await adminStorage.storage
           .from("Nubecita bucket")
           .createSignedUrl(publicacion.file_path, 3600);
 
-      let previewUrl = originalError ? null : original.signedUrl;
+      let previewUrl = originalError ? null : original?.signedUrl ?? null;
 
       if (publicacion.preview_path) {
         const { data: preview, error: previewError } =
-          await supabase.storage
+          await adminStorage.storage
             .from("Nubecita bucket")
             .createSignedUrl(publicacion.preview_path, 3600);
 
@@ -118,7 +200,7 @@ export default async function PerfilPublico({
 
       return {
         ...publicacion,
-        url: originalError ? null : original.signedUrl,
+        url: originalError ? null : original?.signedUrl ?? null,
         previewUrl,
       };
     })
@@ -144,6 +226,17 @@ export default async function PerfilPublico({
     .eq("user_id", perfil.id)
     .eq("activo", true)
     .order("created_at", { ascending: false });
+
+  const planesConPortada = await Promise.all(
+    (planes || []).map(async (plan) => {
+      const portadaUrl = await obtenerUrlFoto(plan.portada_path);
+
+      return {
+        ...plan,
+        portadaUrl,
+      };
+    })
+  );
 
   return (
     <main className="relative isolate min-h-screen bg-white text-slate-900">
@@ -193,7 +286,6 @@ export default async function PerfilPublico({
               coverUrl={coverUrl}
             />
 
-            {/* Botón editar perfil justo debajo de la portada */}
             {esPropietario && (
               <div className="absolute right-4 top-40 z-40 sm:right-8 sm:top-64">
                 <EditarPerfilModal
@@ -203,7 +295,6 @@ export default async function PerfilPublico({
               </div>
             )}
 
-            {/* Seguidores y cantidad de contenido */}
             <div className="absolute left-4 top-4 z-0 flex flex-wrap items-center gap-4 px-5 py-3 [background:radial-gradient(ellipse_at_center,rgba(0,0,0,0.55)_0%,rgba(0,0,0,0.25)_55%,transparent_100%)] sm:left-8">
               <span className="text-sm font-semibold text-gray-300">
                 {cantidadSeguidores ?? 0} Seguidores
@@ -215,7 +306,6 @@ export default async function PerfilPublico({
               </div>
             </div>
 
-            {/* Nombre y usuario al lado de la foto */}
             <div className="ml-28 flex items-center gap-4 px-4 pt-4 sm:ml-36 sm:px-8">
               <div className="min-w-0">
                 <h2 className="break-words text-xl font-bold text-slate-900 sm:text-3xl">
@@ -241,7 +331,6 @@ export default async function PerfilPublico({
 
             <NotificacionFotos />
 
-            {/* Botones de interacción */}
             <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
               <BotonSeguir
                 perfilId={perfil.id}
@@ -249,7 +338,6 @@ export default async function PerfilPublico({
               />
             </div>
 
-            {/* Botones para subir publicaciones y crear planes */}
             {esPropietario && (
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <a
@@ -259,7 +347,10 @@ export default async function PerfilPublico({
                   ＋ SUBIR PUBLICACIÓN
                 </a>
 
-                <CrearPlanAviso ubicacion="perfil" />
+                <CrearPlanAviso
+                  ubicacion="perfil"
+                  verificado={estadoSolicitud === "aprobada"}
+                />
               </div>
             )}
 
@@ -270,9 +361,23 @@ export default async function PerfilPublico({
                     Solicitud en revisión
                   </span>
                 ) : estadoSolicitud === "aprobada" ? (
-                  <span className="inline-flex items-center rounded-xl border border-sky-300/50 bg-sky-100/70 px-5 py-3 text-sm font-semibold text-sky-700">
-                    Cuenta verificada ✓
-                  </span>
+                  <>
+                    <span className="inline-flex items-center rounded-xl border border-sky-300/50 bg-sky-100/70 px-5 py-3 text-sm font-semibold text-sky-700">
+                      Cuenta verificada ✓
+                    </span>
+
+                    {perfil.role === "modelo" &&
+                      (mercadoPagoConectado ? (
+                        <DesconectarMercadoPago />
+                      ) : (
+                        <a
+                          href="/api/mercadopago/conectar"
+                          className="inline-flex items-center rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-600"
+                        >
+                          Conectar Mercado Pago
+                        </a>
+                      ))}
+                  </>
                 ) : (
                   <a
                     href="/solicitar-verificacion"
@@ -372,68 +477,89 @@ export default async function PerfilPublico({
               }
               planes={
                 <>
-                  {planes && planes.length > 0 ? (
+                  {planesConPortada.length > 0 ? (
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      {planes.map((plan) => (
+                      {planesConPortada.map((plan) => (
                         <article
                           key={plan.id}
-                          className="mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-sky-200 bg-sky-100 p-4 text-black shadow-sm"
+                          className="mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-sky-200 bg-sky-100 p-0 text-black shadow-sm"
                         >
-                          <div className="-mx-4 relative mb-4 h-48 overflow-hidden rounded-t-xl bg-sky-200">
-                            <img
-                              src="/nube-default.svg"
-                              alt=""
-                              className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl opacity-60"
-                            />
+                          <Link
+                            href={`/planes/${plan.id}`}
+                            className="block cursor-pointer transition hover:bg-sky-200/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500"
+                            aria-label={`Abrir contenido del plan ${plan.nombre}`}
+                          >
+                            <div className="-mx-4 relative mb-4 h-48 overflow-hidden rounded-t-xl bg-sky-200">
+                              {plan.portadaUrl ? (
+                                <>
+                                  <img
+                                    src={plan.portadaUrl}
+                                    alt=""
+                                    className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl opacity-60"
+                                  />
 
-                            <img
-                              src="/nube-default.svg"
-                              alt="Portada predeterminada de NUBECITA"
-                              className="relative z-10 h-full w-full object-contain"
-                            />
-                          </div>
-
-                          <h3 className="text-lg font-bold text-black">
-                            {plan.nombre}
-                          </h3>
-
-                          {plan.descripcion && (
-                            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">
-                              {plan.descripcion}
-                            </p>
-                          )}
-
-                          <div className="mt-5 flex items-center justify-between">
-                            <span className="text-sm text-slate-800">
-                              Precio
-                            </span>
-
-                            <span className="text-lg font-bold text-black">
-                              {plan.tipo === "gratuito"
-                                ? "Gratis"
-                                : `$ ${Number(plan.precio).toLocaleString("es-AR")}`}
-                            </span>
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap gap-4 border-t border-sky-300 pt-4 text-sm text-slate-800">
-                            {plan.cantidad_fotos > 0 && (
-                              <span>📷 {plan.cantidad_fotos} fotos</span>
-                            )}
-
-                            {plan.cantidad_videos > 0 && (
-                              <span>🎬 {plan.cantidad_videos} videos</span>
-                            )}
-
-                            {plan.cantidad_fotos === 0 &&
-                              plan.cantidad_videos === 0 && (
-                                <span className="text-slate-700">
-                                  Todavía no hay contenido
-                                </span>
+                                  <img
+                                    src={plan.portadaUrl}
+                                    alt={`Portada del plan ${plan.nombre}`}
+                                    className="relative z-10 h-full w-full object-cover"
+                                  />
+                                </>
+                              ) : (
+                                <img
+                                  src="/nube-default.svg"
+                                  alt="Portada predeterminada de NUBECITA"
+                                  className="relative z-10 h-full w-full object-contain"
+                                />
                               )}
-                          </div>
+                            </div>
+
+                            <h3 className="px-4 pt-4 text-lg font-bold text-black">
+                              {plan.nombre}
+                            </h3>
+
+                            {plan.descripcion && (
+                              <p className="mt-2 px-4 whitespace-pre-wrap text-sm leading-6 text-slate-800">
+                                {plan.descripcion}
+                              </p>
+                            )}
+
+                            <div className="mx-4 mt-5 flex items-center justify-between">
+                              <span className="text-sm text-slate-800">
+                                Precio
+                              </span>
+
+                              <span className="text-lg font-bold text-black">
+                                {plan.tipo === "gratuito"
+                                  ? "Gratis"
+                                  : `$ ${Number(plan.precio).toLocaleString("es-AR")}`}
+                              </span>
+                            </div>
+
+                            <div className="mx-4 mt-4 flex flex-wrap gap-4 border-t border-sky-300 pt-4 text-sm text-slate-800">
+                              {plan.cantidad_fotos > 0 && (
+                                <span>📷 {plan.cantidad_fotos} fotos</span>
+                              )}
+
+                              {plan.cantidad_videos > 0 && (
+                                <span>🎬 {plan.cantidad_videos} videos</span>
+                              )}
+
+                              {plan.cantidad_fotos === 0 &&
+                                plan.cantidad_videos === 0 && (
+                                  <span className="text-slate-700">
+                                    Todavía no hay contenido
+                                  </span>
+                                )}
+                            </div>
+                          </Link>
 
                           {esPropietario && (
-                            <div className="mt-4 border-t border-sky-300 pt-4">
+                            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-sky-300 pt-4">
+                              <EditarPlan
+                                planId={plan.id}
+                                userId={perfil.id}
+                              />
+
                               <EliminarPlan
                                 planId={plan.id}
                                 userId={perfil.id}

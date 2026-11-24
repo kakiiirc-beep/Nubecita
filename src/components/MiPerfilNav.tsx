@@ -10,6 +10,7 @@ export default function MiPerfilNav() {
   const supabase = useMemo(() => createClient(), []);
 
   const [username, setUsername] = useState<string | null>(null);
+  const [verificado, setVerificado] = useState(false);
   const [sesionActiva, setSesionActiva] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [menuAbierto, setMenuAbierto] = useState(false);
@@ -21,6 +22,8 @@ export default function MiPerfilNav() {
 
       if (!authData.user) {
         setSesionActiva(false);
+        setUsername(null);
+        setVerificado(false);
         setCargando(false);
         return;
       }
@@ -34,6 +37,17 @@ export default function MiPerfilNav() {
         .single();
 
       setUsername(perfil?.username ?? null);
+
+      const { data: solicitud } = await supabase
+        .from("solicitudes_verificacion")
+        .select("estado")
+        .eq("user_id", authData.user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setVerificado(solicitud?.estado === "aprobada");
+
       setCargando(false);
     }
 
@@ -46,6 +60,7 @@ export default function MiPerfilNav() {
 
       if (!session?.user) {
         setUsername(null);
+        setVerificado(false);
         setMenuAbierto(false);
         setCargando(false);
       } else if (event === "SIGNED_IN") {
@@ -105,7 +120,6 @@ export default function MiPerfilNav() {
 
   if (cargando || fotoAbierta) return null;
 
-  // Menú para visitantes sin sesión iniciada
   if (!sesionActiva) {
     return (
       <div className="fixed right-6 top-20 z-[10000] flex flex-col items-end">
@@ -165,7 +179,6 @@ export default function MiPerfilNav() {
     );
   }
 
-  // Menú para usuarios con sesión iniciada
   if (!username) return null;
 
   return (
@@ -188,7 +201,18 @@ export default function MiPerfilNav() {
               Ver mi perfil
             </Link>
 
-            <CrearPlanAviso ubicacion="menu" />
+            <Link
+              href="/mis-compras"
+              onClick={() => setMenuAbierto(false)}
+              className="block border-t border-slate-600 px-4 py-3 text-sm text-white transition hover:bg-slate-600"
+            >
+              Mis compras
+            </Link>
+
+            <CrearPlanAviso
+              ubicacion="menu"
+              verificado={verificado}
+            />
 
             <button
               type="button"

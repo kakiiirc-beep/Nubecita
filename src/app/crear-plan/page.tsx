@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -14,6 +15,39 @@ export default function CrearPlan() {
   const [archivos, setArchivos] = useState<File[]>([]);
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState("");
+
+  const [verificandoAcceso, setVerificandoAcceso] = useState(true);
+  const [autorizado, setAutorizado] = useState(false);
+
+  useEffect(() => {
+    async function verificarAcceso() {
+      const supabase = createClient();
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: puedeCrear, error } = await supabase.rpc(
+        "mi_cuenta_puede_crear_planes"
+      );
+
+      if (error || puedeCrear !== true) {
+        router.replace("/");
+        return;
+      }
+
+      setAutorizado(true);
+      setVerificandoAcceso(false);
+    }
+
+    verificarAcceso();
+  }, [router]);
 
   function seleccionarArchivos(lista: FileList | null) {
     if (!lista) return;
@@ -46,6 +80,11 @@ export default function CrearPlan() {
     e.preventDefault();
     setMensaje("");
 
+    if (!autorizado || verificandoAcceso) {
+      setMensaje("No tenés autorización para crear planes.");
+      return;
+    }
+
     if (!nombre.trim()) {
       setMensaje("Escribí un nombre para el plan.");
       return;
@@ -60,9 +99,16 @@ export default function CrearPlan() {
 
     if (
       tipo === "pago" &&
-      (!Number.isFinite(precioNumerico) || precioNumerico <= 0)
+      (
+        !Number.isFinite(precioNumerico) ||
+        precioNumerico <= 0 ||
+        precioNumerico > 9999999999.99 ||
+        !/^\d+(\.\d{1,2})?$/.test(precio.trim())
+      )
     ) {
-      setMensaje("Ingresá un precio válido.");
+      setMensaje(
+        "Ingresá un precio válido en pesos argentinos, con hasta dos decimales."
+      );
       return;
     }
 
@@ -82,6 +128,16 @@ export default function CrearPlan() {
         throw new Error("Tenés que iniciar sesión.");
       }
 
+      // Volver a comprobar la autorización antes de crear el plan.
+      const { data: puedeCrear, error: verificacionError } =
+        await supabase.rpc("mi_cuenta_puede_crear_planes");
+
+      if (verificacionError || puedeCrear !== true) {
+        throw new Error(
+          "Tu cuenta no está autorizada para crear planes. Verificá el estado de tu cuenta."
+        );
+      }
+
       const { data: plan, error: planError } = await supabase
         .from("planes")
         .insert({
@@ -89,7 +145,7 @@ export default function CrearPlan() {
           nombre: nombre.trim(),
           descripcion: descripcion.trim(),
           tipo,
-          precio: precioNumerico,
+          precio: Number(precioNumerico.toFixed(2)),
         })
         .select("id")
         .single();
@@ -106,6 +162,7 @@ export default function CrearPlan() {
 
       for (let i = 0; i < archivos.length; i++) {
         const archivo = archivos[i];
+
         const extension = archivo.name.includes(".")
           ? archivo.name.substring(archivo.name.lastIndexOf("."))
           : "";
@@ -120,7 +177,9 @@ export default function CrearPlan() {
           });
 
         if (subidaError) {
-          throw new Error("No se pudo subir " + archivo.name + ": " + subidaError.message);
+          throw new Error(
+            "No se pudo subir " + archivo.name + ": " + subidaError.message
+          );
         }
 
         archivosSubidos.push(ruta);
@@ -139,7 +198,9 @@ export default function CrearPlan() {
         .insert(registros);
 
       if (registroError) {
-        throw new Error("No se pudieron guardar los archivos: " + registroError.message);
+        throw new Error(
+          "No se pudieron guardar los archivos: " + registroError.message
+        );
       }
 
       setMensaje("¡Plan creado correctamente!");
@@ -170,6 +231,18 @@ export default function CrearPlan() {
     }
   }
 
+  if (verificandoAcceso) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#080D16] text-white">
+        <p className="text-sky-200">Verificando acceso...</p>
+      </main>
+    );
+  }
+
+  if (!autorizado) {
+    return null;
+  }
+
   return (
     <main className="min-h-screen bg-[#080D16] px-5 py-10 text-white">
       <div className="mx-auto max-w-2xl">
@@ -186,6 +259,7 @@ export default function CrearPlan() {
             <label className="mb-2 block text-sm text-sky-100">
               Nombre del plan
             </label>
+
             <input
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
@@ -199,6 +273,7 @@ export default function CrearPlan() {
             <label className="mb-2 block text-sm text-sky-100">
               Descripción
             </label>
+
             <textarea
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
@@ -212,6 +287,7 @@ export default function CrearPlan() {
             <label className="mb-2 block text-sm text-sky-100">
               Tipo de plan
             </label>
+
             <select
               value={tipo}
               onChange={(e) => setTipo(e.target.value)}
@@ -225,19 +301,22 @@ export default function CrearPlan() {
           {tipo === "pago" && (
             <div>
               <label className="mb-2 block text-sm text-sky-100">
-                Precio
+                Precio en pesos argentinos (ARS)
               </label>
+
               <input
                 type="number"
                 min="0.01"
+                max="9999999999.99"
                 step="0.01"
                 value={precio}
                 onChange={(e) => setPrecio(e.target.value)}
                 placeholder="Ingresá el precio"
                 className="w-full rounded-xl border border-white/10 bg-white/5 p-3 outline-none focus:border-sky-300"
               />
+
               <p className="mt-2 text-xs text-gray-400">
-                La moneda y los pagos se configurarán más adelante.
+                El precio se cobrará en pesos argentinos (ARS).
               </p>
             </div>
           )}

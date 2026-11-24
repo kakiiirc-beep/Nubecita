@@ -19,7 +19,7 @@ export default function EliminarPlan({
 
   async function eliminarPlan() {
     const confirmar = window.confirm(
-      "¿Estás seguro de que querés borrar este plan? Se eliminarán también todas sus fotos y videos. Esta acción no se puede deshacer."
+      "¿Querés retirar este plan? Dejará de estar disponible para nuevas compras, pero los clientes que ya lo compraron conservarán su acceso hasta el vencimiento."
     );
 
     if (!confirmar) return;
@@ -36,71 +36,28 @@ export default function EliminarPlan({
       } = await supabase.auth.getUser();
 
       if (authError || !user || user.id !== userId) {
-        throw new Error("No tenés permiso para borrar este plan.");
+        throw new Error("No tenés permiso para retirar este plan.");
       }
 
-      const { data: plan, error: planError } = await supabase
+      const { data, error } = await supabase
         .from("planes")
-        .select("id")
+        .update({ activo: false })
         .eq("id", planId)
         .eq("user_id", user.id)
+        .select("id")
         .single();
 
-      if (planError || !plan) {
-        throw new Error(
-          "No se encontró el plan o no tenés permiso para borrarlo."
-        );
+      if (error || !data) {
+        throw new Error("No se pudo retirar el plan.");
       }
 
-      const { data: archivos, error: archivosError } = await supabase
-        .from("plan_archivos")
-        .select("file_path")
-        .eq("plan_id", planId);
-
-      if (archivosError) {
-        throw new Error(
-          "No se pudieron consultar los archivos del plan: " +
-            archivosError.message
-        );
-      }
-
-      const rutas = (archivos || [])
-        .map((archivo) => archivo.file_path)
-        .filter((ruta): ruta is string => Boolean(ruta));
-
-      if (rutas.length > 0) {
-        const { error: storageError } = await supabase.storage
-          .from("Nubecita bucket")
-          .remove(rutas);
-
-        if (storageError) {
-          throw new Error(
-            "No se pudieron eliminar los archivos del plan: " +
-              storageError.message
-          );
-        }
-      }
-
-      const { error: eliminarPlanError } = await supabase
-        .from("planes")
-        .delete()
-        .eq("id", planId)
-        .eq("user_id", user.id);
-
-      if (eliminarPlanError) {
-        throw new Error(
-          "Los archivos fueron eliminados, pero no se pudo borrar el plan: " +
-            eliminarPlanError.message
-        );
-      }
-
-      setMensaje("Plan eliminado correctamente.");
+      setMensaje("Plan retirado correctamente.");
       router.refresh();
     } catch (error) {
       setMensaje(
         error instanceof Error
           ? error.message
-          : "Ocurrió un error al eliminar el plan."
+          : "Ocurrió un error al retirar el plan."
       );
     } finally {
       setCargando(false);
@@ -115,7 +72,7 @@ export default function EliminarPlan({
         disabled={cargando}
         className="w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
       >
-        {cargando ? "Eliminando plan..." : "Borrar plan"}
+        {cargando ? "Retirando plan..." : "Retirar plan"}
       </button>
 
       {mensaje && (
