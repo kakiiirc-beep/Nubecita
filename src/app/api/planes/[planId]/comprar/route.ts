@@ -188,7 +188,7 @@ export async function POST(_request: Request, context: Context) {
 
     // 9. Obtener el token de acceso de la modelo.
     const accessToken = await obtenerAccessTokenMercadoPago(vendedorId);
-
+console.log("CHECKOUT: token de vendedora obtenido:", !!accessToken);
     if (!accessToken) {
       return errorResponse(
         "No se pudo obtener la conexión de Mercado Pago.",
@@ -201,7 +201,7 @@ export async function POST(_request: Request, context: Context) {
     });
 
     const preferenceClient = new Preference(mpConfig);
-
+console.log("CHECKOUT: preferenceClient creado correctamente");
     // 10. Buscar una compra pendiente existente.
     const { data: compraExistente, error: compraError } = await admin
       .from("compras_planes")
@@ -221,7 +221,7 @@ export async function POST(_request: Request, context: Context) {
     }
 
     let compraId: string;
-
+console.log("CHECKOUT: compra pendiente encontrada:", !!compraExistente);
     if (compraExistente) {
       // Comprobar que la compra pendiente coincida con los datos actuales.
       const mismoImporte =
@@ -287,6 +287,10 @@ export async function POST(_request: Request, context: Context) {
     // 13. Recuperar una preferencia guardada solamente si sus
     // direcciones de retorno corresponden al dominio actual.
     if (compraExistente?.mercadopago_preference_id) {
+      console.log(
+  "CHECKOUT: existe preferencia guardada:",
+  !!compraExistente?.mercadopago_preference_id
+);
       try {
         const preferencia = await preferenceClient.get({
           preferenceId: compraExistente.mercadopago_preference_id,
@@ -315,6 +319,8 @@ export async function POST(_request: Request, context: Context) {
 
     // 14. Buscar una preferencia anterior que se haya creado
     // pero cuyo ID no haya llegado a guardarse en Supabase.
+    console.log("CHECKOUT: iniciando búsqueda de preferencia anterior");
+
     const busqueda = await preferenceClient.search({
       options: {
         external_reference: compraId,
@@ -371,6 +377,7 @@ export async function POST(_request: Request, context: Context) {
     const comision = comisionCentavos / 100;
 
     // 16. Crear una preferencia exclusivamente para pruebas.
+    console.log("CHECKOUT: iniciando creación de preferencia nueva");
     const preferencia = await preferenceClient.create({
       body: {
         items: [
