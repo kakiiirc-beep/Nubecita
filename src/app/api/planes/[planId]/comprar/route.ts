@@ -350,6 +350,13 @@ export async function POST(_request: Request, context: Context) {
       externalReference: preferencia.external_reference,
     });
 
+    // Diagnóstico: comprobar si Mercado Pago devolvió las URLs de inicio.
+    // No se imprimen las URLs ni datos sensibles.
+    console.log("CHECKOUT: diagnóstico de URLs:", {
+      tieneSandboxInitPoint: !!preferencia.sandbox_init_point,
+      tieneInitPoint: !!preferencia.init_point,
+    });
+
     // 16. Exigir el enlace Sandbox.
     if (!preferencia.sandbox_init_point) {
       console.error("Mercado Pago no devolvió un enlace Sandbox válido.");
