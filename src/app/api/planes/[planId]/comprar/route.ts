@@ -188,7 +188,9 @@ export async function POST(_request: Request, context: Context) {
 
     // 9. Obtener el token de acceso de la modelo.
     const accessToken = await obtenerAccessTokenMercadoPago(vendedorId);
-console.log("CHECKOUT: token de vendedora obtenido:", !!accessToken);
+
+    console.log("CHECKOUT: token de vendedora obtenido:", !!accessToken);
+
     if (!accessToken) {
       return errorResponse(
         "No se pudo obtener la conexión de Mercado Pago.",
@@ -201,7 +203,9 @@ console.log("CHECKOUT: token de vendedora obtenido:", !!accessToken);
     });
 
     const preferenceClient = new Preference(mpConfig);
-console.log("CHECKOUT: preferenceClient creado correctamente");
+
+    console.log("CHECKOUT: preferenceClient creado correctamente");
+
     // 10. Buscar una compra pendiente existente.
     const { data: compraExistente, error: compraError } = await admin
       .from("compras_planes")
@@ -221,7 +225,12 @@ console.log("CHECKOUT: preferenceClient creado correctamente");
     }
 
     let compraId: string;
-console.log("CHECKOUT: compra pendiente encontrada:", !!compraExistente);
+
+    console.log(
+      "CHECKOUT: compra pendiente encontrada:",
+      !!compraExistente
+    );
+
     if (compraExistente) {
       // Comprobar que la compra pendiente coincida con los datos actuales.
       const mismoImporte =
@@ -284,114 +293,25 @@ console.log("CHECKOUT: compra pendiente encontrada:", !!compraExistente);
       return errorResponse("La URL de NUBECITA no es válida.", 500);
     }
 
-    // 13. Recuperar una preferencia guardada solamente si sus
-    // direcciones de retorno corresponden al dominio actual.
-    if (compraExistente?.mercadopago_preference_id) {
-      console.log(
-  "CHECKOUT: existe preferencia guardada:",
-  !!compraExistente?.mercadopago_preference_id
-);
-      try {
-        const preferencia = await preferenceClient.get({
-          preferenceId: compraExistente.mercadopago_preference_id,
-        });
-        console.log("CHECKOUT: diagnóstico de preferencia MP:", {
-  collectorId: preferencia.collector_id,
-  marketplace: preferencia.marketplace,
-  marketplaceFee: preferencia.marketplace_fee,
-  externalReference: preferencia.external_reference,
-});
-      console.log("CHECKOUT: resultado de recuperar preferencia:", {
-  coincideCompra: preferencia.external_reference === compraId,
-  tieneSandbox: !!preferencia.sandbox_init_point,
-  urlsActuales: tieneBackUrlsActuales(
-    preferencia,
-    origin,
-    planId
-  ),
-});
-        if (
-          preferencia.external_reference === compraId &&
-          preferencia.sandbox_init_point &&
-          tieneBackUrlsActuales(preferencia, origin, planId)
-        ) {
-          return NextResponse.json({
-            preferenceId: preferencia.id,
-          });
-        }
-
-        console.warn(
-          "CHECKOUT: preferencia guardada descartada por tener datos o URLs anteriores."
-        );
-      } catch (error) {
-        console.error(
-          "No se pudo recuperar la preferencia existente:",
-          error instanceof Error ? error.message : "Error desconocido"
-        );
+    // 13. PRUEBA TEMPORAL:
+    // No recuperar la preferencia guardada ni buscar preferencias anteriores.
+    // Así comprobamos la creación de una preferencia nueva con el token OAuth actual.
+    console.log(
+      "CHECKOUT: prueba de preferencia nueva. Se omite la recuperación anterior.",
+      {
+        tienePreferenciaAnterior: !!compraExistente?.mercadopago_preference_id,
+        compraId,
       }
-    }
-
-    // 14. Buscar una preferencia anterior que se haya creado
-    // pero cuyo ID no haya llegado a guardarse en Supabase.
-    console.log("CHECKOUT: iniciando búsqueda de preferencia anterior");
-
-    const busqueda = await preferenceClient.search({
-      options: {
-        external_reference: compraId,
-      },
-    });
-
-    const preferenciaEncontrada = busqueda.elements?.find(
-      (elemento) =>
-        elemento.external_reference === compraId &&
-        elemento.live_mode === false
     );
 
-    if (preferenciaEncontrada) {
-      const preferencia = await preferenceClient.get({
-        preferenceId: preferenciaEncontrada.id,
-      });
-
-      if (
-        preferencia.external_reference === compraId &&
-        preferencia.sandbox_init_point &&
-        tieneBackUrlsActuales(preferencia, origin, planId)
-      ) {
-        const { error: updateError } = await admin
-          .from("compras_planes")
-          .update({
-            mercadopago_preference_id: preferencia.id,
-          })
-          .eq("id", compraId);
-
-        if (updateError) {
-          console.error(
-            "No se pudo guardar el ID de preferencia:",
-            updateError.message
-          );
-          return errorResponse(
-            "Se encontró el pago, pero no se pudo guardar su referencia.",
-            500
-          );
-        }
-
-        return NextResponse.json({
-          preferenceId: preferencia.id,
-        });
-      }
-
-      console.warn(
-        "CHECKOUT: preferencia encontrada descartada por tener URLs anteriores."
-      );
-    }
-
-    // 15. Calcular la comisión del 15%.
+    // 14. Calcular la comisión del 15%.
     const importeCentavos = Math.round(precio * 100);
     const comisionCentavos = Math.round(importeCentavos * 0.15);
     const comision = comisionCentavos / 100;
 
-    // 16. Crear una preferencia exclusivamente para pruebas.
+    // 15. Crear una preferencia nueva exclusivamente para pruebas.
     console.log("CHECKOUT: iniciando creación de preferencia nueva");
+
     const preferencia = await preferenceClient.create({
       body: {
         items: [
@@ -416,11 +336,21 @@ console.log("CHECKOUT: compra pendiente encontrada:", !!compraExistente);
         },
       },
       requestOptions: {
-        idempotencyKey: `checkout-v2-${compraId}`,
+        // Clave nueva para esta prueba.
+        // Mantenerla igual permite que los reintentos no creen duplicados.
+        idempotencyKey: `checkout-prueba-nueva-01-${compraId}`,
       },
     });
 
-    // 17. Exigir el enlace Sandbox.
+    console.log("CHECKOUT: preferencia nueva creada:", {
+      preferenceId: preferencia.id,
+      collectorId: preferencia.collector_id,
+      marketplace: preferencia.marketplace,
+      marketplaceFee: preferencia.marketplace_fee,
+      externalReference: preferencia.external_reference,
+    });
+
+    // 16. Exigir el enlace Sandbox.
     if (!preferencia.sandbox_init_point) {
       console.error("Mercado Pago no devolvió un enlace Sandbox válido.");
       return errorResponse(
@@ -429,18 +359,19 @@ console.log("CHECKOUT: compra pendiente encontrada:", !!compraExistente);
       );
     }
 
-    // 18. Comprobar que la preferencia nueva tenga las URLs correctas.
+    // 17. Comprobar que la preferencia nueva tenga las URLs correctas.
     if (!tieneBackUrlsActuales(preferencia, origin, planId)) {
       console.error(
         "CHECKOUT: Mercado Pago devolvió una preferencia con URLs incorrectas."
       );
+
       return errorResponse(
         "La preferencia de pago no tiene las direcciones de retorno esperadas.",
         502
       );
     }
 
-    // 19. Guardar el ID de preferencia.
+    // 18. Guardar el ID de la preferencia nueva.
     const { error: updateError } = await admin
       .from("compras_planes")
       .update({
@@ -453,6 +384,7 @@ console.log("CHECKOUT: compra pendiente encontrada:", !!compraExistente);
         "Error al guardar la preferencia:",
         updateError.message
       );
+
       return errorResponse(
         "Se creó el pago, pero no se pudo guardar su referencia. Podés reintentar.",
         500
@@ -463,10 +395,7 @@ console.log("CHECKOUT: compra pendiente encontrada:", !!compraExistente);
       preferenceId: preferencia.id,
     });
   } catch (error) {
-    console.error(
-      "Error inesperado en checkout:",
-      error instanceof Error ? error.message : "Error desconocido"
-    );
+    console.error("Error inesperado en checkout:", error);
 
     return errorResponse(
       "Ocurrió un error al iniciar el proceso de compra.",
