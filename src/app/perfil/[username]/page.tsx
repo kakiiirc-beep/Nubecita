@@ -11,6 +11,7 @@ import EditarPublicacion from "@/components/EditarPublicacion";
 import VerImagen from "@/components/VerImagen";
 import PestanasPerfil from "@/components/PestanasPerfil";
 import BotonSeguir from "@/components/BotonSeguir";
+import BotonDonar from "@/components/BotonDonar";
 import FotosPerfil from "@/components/FotosPerfil";
 import CrearPlanAviso from "@/components/CrearPlanAviso";
 import EditarPerfilModal from "@/components/EditarPerfilModal";
@@ -286,14 +287,18 @@ export default async function PerfilPublico({
               coverUrl={coverUrl}
             />
 
-            {esPropietario && (
-              <div className="absolute right-4 top-40 z-40 sm:right-8 sm:top-64">
+            <div className="absolute right-4 top-40 z-40 flex w-44 flex-col items-end gap-2 sm:right-8 sm:top-64">
+              {esPropietario && (
                 <EditarPerfilModal
                   userId={perfil.id}
                   username={perfil.username}
                 />
-              </div>
-            )}
+              )}
+
+              {!esPropietario && user && perfil.role === "modelo" && (
+                <BotonDonar modeloId={perfil.id} />
+              )}
+            </div>
 
             <div className="absolute left-4 top-4 z-0 flex flex-wrap items-center gap-4 px-5 py-3 [background:radial-gradient(ellipse_at_center,rgba(0,0,0,0.55)_0%,rgba(0,0,0,0.25)_55%,transparent_100%)] sm:left-8">
               <span className="text-sm font-semibold text-gray-300">
