@@ -137,10 +137,11 @@ export default function VerPlanPage() {
       const urlCheckout = new URL(datos.checkoutUrl);
 
       const dominiosPermitidos = [
-        "www.mercadopago.com",
-        "www.mercadopago.com.ar",
-        "sandbox.mercadopago.com",
-      ];
+  "www.mercadopago.com",
+  "www.mercadopago.com.ar",
+  "sandbox.mercadopago.com",
+  "sandbox.mercadopago.com.ar",
+];
 
       if (
         urlCheckout.protocol !== "https:" ||
