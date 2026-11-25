@@ -70,6 +70,8 @@ export async function GET() {
 
     authorizationUrl.searchParams.set("response_type", "code");
     authorizationUrl.searchParams.set("client_id", clientId);
+    authorizationUrl.searchParams.set("platform_id", "mp");
+    authorizationUrl.searchParams.set("platform_id", "mp");
     authorizationUrl.searchParams.set("redirect_uri", REDIRECT_URI);
     authorizationUrl.searchParams.set("state", state);
     authorizationUrl.searchParams.set("code_challenge", challenge);
