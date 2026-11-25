@@ -324,7 +324,9 @@ export async function GET(request: NextRequest) {
     }
 
     const publicKeyRecibida = Boolean(tokens.public_key);
-
+console.log("[Mercado Pago] ¿Public Key OAuth coincide con la de NUBECITA?:",
+  tokens.public_key === process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY
+);
 const destino = perfil.username
   ? `/perfil/${encodeURIComponent(perfil.username)}?mercadopago=conectado&mp_public_key=${publicKeyRecibida}`
   : `/?mercadopago=conectado&mp_public_key=${publicKeyRecibida}`;
