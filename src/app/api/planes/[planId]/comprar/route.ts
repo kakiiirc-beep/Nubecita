@@ -399,8 +399,9 @@ export async function POST(_request: Request, context: Context) {
     }
 
     return NextResponse.json({
-      preferenceId: preferencia.id,
-    });
+  preferenceId: preferencia.id,
+  checkoutUrl: preferencia.sandbox_init_point,
+});
   } catch (error) {
     console.error("Error inesperado en checkout:", error);
 

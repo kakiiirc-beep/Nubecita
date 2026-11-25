@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { loadMercadoPago } from "@mercadopago/sdk-js";
 import { createClient } from "@/lib/supabase/client";
 
 type Plan = {
@@ -23,34 +22,6 @@ type Archivo = {
   previewUrl: string;
 };
 
-type WalletBrickController = {
-  unmount: () => Promise<void> | void;
-};
-
-type MercadoPagoInstance = {
-  bricks: () => {
-    create: (
-      type: "wallet",
-      containerId: string,
-      settings: {
-        initialization: {
-          preferenceId: string;
-          marketplace: true,
-        };
-      }
-    ) => Promise<WalletBrickController>;
-  };
-};
-
-declare global {
-  interface Window {
-    MercadoPago: new (
-      publicKey: string,
-      options: { locale: string }
-    ) => MercadoPagoInstance;
-  }
-}
-
 export default function VerPlanPage() {
   const params = useParams<{ planId: string }>();
   const planId = params.planId;
@@ -62,7 +33,6 @@ export default function VerPlanPage() {
   const [requiereCompra, setRequiereCompra] = useState(false);
   const [comprando, setComprando] = useState(false);
   const [errorCompra, setErrorCompra] = useState("");
-  const [preferenceId, setPreferenceId] = useState<string | null>(null);
 
   useEffect(() => {
     let activo = true;
@@ -139,7 +109,6 @@ export default function VerPlanPage() {
     try {
       setComprando(true);
       setErrorCompra("");
-      setPreferenceId(null);
 
       const respuesta = await fetch(
         `/api/planes/${planId}/comprar`,
@@ -157,15 +126,32 @@ export default function VerPlanPage() {
       }
 
       if (
-        typeof datos.preferenceId !== "string" ||
-        !datos.preferenceId
+        typeof datos.checkoutUrl !== "string" ||
+        !datos.checkoutUrl
       ) {
         throw new Error(
-          "Mercado Pago no devolvió un identificador de pago válido."
+          "Mercado Pago no devolvió un enlace de pago válido."
         );
       }
 
-      setPreferenceId(datos.preferenceId);
+      const urlCheckout = new URL(datos.checkoutUrl);
+
+      const dominiosPermitidos = [
+        "www.mercadopago.com",
+        "www.mercadopago.com.ar",
+        "sandbox.mercadopago.com",
+      ];
+
+      if (
+        urlCheckout.protocol !== "https:" ||
+        !dominiosPermitidos.includes(urlCheckout.hostname)
+      ) {
+        throw new Error(
+          "Mercado Pago devolvió una dirección de pago no válida."
+        );
+      }
+
+      window.location.assign(urlCheckout.toString());
     } catch (err) {
       setErrorCompra(
         err instanceof Error
@@ -176,81 +162,6 @@ export default function VerPlanPage() {
       setComprando(false);
     }
   }
-
-  useEffect(() => {
-    if (!preferenceId) return;
-
-    let cancelado = false;
-    let brickController: WalletBrickController | null = null;
-
-    async function mostrarWalletBrick() {
-      try {
-        const publicKey =
-          process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY;
-
-        if (!publicKey) {
-          throw new Error(
-            "Falta configurar la Public Key de Mercado Pago."
-          );
-        }
-
-        await loadMercadoPago();
-
-        if (cancelado) return;
-
-        if (!window.MercadoPago) {
-          throw new Error(
-            "No se pudo cargar el SDK de Mercado Pago."
-          );
-        }
-
-        const mercadoPago = new window.MercadoPago(publicKey, {
-          locale: "es-AR",
-        });
-
-        const bricksBuilder = mercadoPago.bricks();
-
-        const controller = await bricksBuilder.create(
-          "wallet",
-          "walletBrick_container",
-          {
-            initialization: {
-              preferenceId: preferenceId as string,
-              marketplace: true,
-            },
-          }
-        );
-
-        if (cancelado) {
-          await controller.unmount();
-          return;
-        }
-
-        brickController = controller;
-        setComprando(false);
-      } catch (err) {
-        if (cancelado) return;
-
-        setErrorCompra(
-          err instanceof Error
-            ? err.message
-            : "No se pudo mostrar el botón de Mercado Pago."
-        );
-
-        setComprando(false);
-      }
-    }
-
-    mostrarWalletBrick();
-
-    return () => {
-      cancelado = true;
-
-      if (brickController) {
-        void brickController.unmount();
-      }
-    };
-  }, [preferenceId]);
 
   if (cargando) {
     return (
@@ -318,30 +229,16 @@ export default function VerPlanPage() {
                   primero necesitás completar la compra.
                 </p>
 
-                {!preferenceId && (
-                  <button
-                    type="button"
-                    onClick={iniciarCompra}
-                    disabled={comprando}
-                    className="mt-5 w-full rounded-xl bg-sky-500 px-5 py-3 font-bold text-white transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                  >
-                    {comprando
-                      ? "Preparando pago..."
-                      : "Comprar pack"}
-                  </button>
-                )}
-
-                {preferenceId && (
-                  <div className="mt-5">
-                    <div id="walletBrick_container" />
-
-                    {comprando && (
-                      <p className="text-sm text-slate-600">
-                        Cargando opciones de pago...
-                      </p>
-                    )}
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={iniciarCompra}
+                  disabled={comprando}
+                  className="mt-5 w-full rounded-xl bg-sky-500 px-5 py-3 font-bold text-white transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  {comprando
+                    ? "Redirigiendo a Mercado Pago..."
+                    : "Comprar pack"}
+                </button>
 
                 {errorCompra && (
                   <p className="mt-4 text-sm font-medium text-red-600">
