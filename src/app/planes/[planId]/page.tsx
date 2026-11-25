@@ -35,6 +35,7 @@ type MercadoPagoInstance = {
       settings: {
         initialization: {
           preferenceId: string;
+          marketplace: true,
         };
       }
     ) => Promise<WalletBrickController>;
@@ -215,6 +216,7 @@ export default function VerPlanPage() {
           {
             initialization: {
               preferenceId: preferenceId as string,
+              marketplace: true,
             },
           }
         );
