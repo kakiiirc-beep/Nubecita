@@ -295,6 +295,12 @@ console.log("CHECKOUT: compra pendiente encontrada:", !!compraExistente);
         const preferencia = await preferenceClient.get({
           preferenceId: compraExistente.mercadopago_preference_id,
         });
+        console.log("CHECKOUT: diagnóstico de preferencia MP:", {
+  collectorId: preferencia.collector_id,
+  marketplace: preferencia.marketplace,
+  marketplaceFee: preferencia.marketplace_fee,
+  externalReference: preferencia.external_reference,
+});
       console.log("CHECKOUT: resultado de recuperar preferencia:", {
   coincideCompra: preferencia.external_reference === compraId,
   tieneSandbox: !!preferencia.sandbox_init_point,
